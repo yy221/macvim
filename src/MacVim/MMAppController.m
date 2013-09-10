@@ -1819,6 +1819,25 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
             [dict setObject:s forKey:@"searchText"];
     }
 
+    // 4. chliu added, 2013/09/10
+    // to parse command line arguments, like follow:
+    NSArray* args = [ [NSProcessInfo processInfo] arguments];
+    for ( NSString* arg in args )
+    {
+        if ( [arg isEqualTo:@"--servename"] )
+        {
+            //TODO: make mac vim only run an instance !
+        }
+        else if ( [arg isEqualTo:@"--remote-silent" ] ) 
+        {
+            
+        }
+        else if ( [arg characterAtIndex:0] == '+' )
+        {
+            [dict setObject:[arg substringFromIndex:1] forKey:@"cursorLine"];
+        }
+    } 
+
     return dict;
 }
 
