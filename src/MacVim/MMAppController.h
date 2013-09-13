@@ -15,8 +15,17 @@
 @class MMWindowController;
 @class MMVimController;
 
+//chliu added 2013-09-13, 
+// for support "--servername" parameters.
+@protocol MacVimServer
 
-@interface MMAppController : NSObject <MMAppProtocol> {
+-(void) openRemoteFiles:(in bycopy NSArray*)args;
+
+@end
+
+
+@interface MMAppController : NSObject <MMAppProtocol, MacVimServer> {
+    NSConnection        *m_serverConn; //chliu added 2013-09-13
     NSConnection        *connection;
     NSMutableArray      *vimControllers;
     NSString            *openSelectionString;

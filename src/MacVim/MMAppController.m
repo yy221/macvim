@@ -280,6 +280,11 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
 {
     ASLogDebug(@"");
 
+    //chliu added 2013-09-13
+    // for support --servername parameter.
+    [m_serverConn registerName:nil];
+    [m_serverConn release];
+    
     [connection release];  connection = nil;
     [inputQueues release];  inputQueues = nil;
     [pidArguments release];  pidArguments = nil;
@@ -293,8 +298,69 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
     [super dealloc];
 }
 
+//chliu added 2013-09-13, for support --servername parameter.
+-(NSDistantObject*) makeServer:(NSString*)name
+{
+    // Lookup the server connection
+    NSDistantObject* obj = [NSConnection rootProxyForConnectionWithRegisteredName:name host:nil];
+    
+    if (!obj) 
+    {
+        // Create a generic NSConnection to use to vend an object over DO.
+        NSConnection *conn = [[NSConnection alloc] init];
+        [conn setRootObject:self];
+        
+        // Set the name of the root object
+        if ( ![conn registerName:name] ) 
+        {
+            NSLog (@"Could not register server.  Is one already running?");
+            [conn release];
+        }
+        else
+        {
+            // Have the run loop run forever, servicing incoming messages
+            // TODO: [[NSRunLoop currentRunLoop] run];
+            m_serverConn = [conn retain];
+        }
+    }
+    
+    NSLog ( @"make server: %@, %d, %p", name,
+             [ [NSProcessInfo processInfo] processIdentifier], obj );
+    
+    return [obj retain];
+}
+
+
 - (void)applicationWillFinishLaunching:(NSNotification *)notification
 {
+    //chliu added 2013-09-13, for parse args:--servername
+    BOOL isServerName = NO;
+    NSDistantObject* conn = nil;
+    NSArray* parameters = [ [NSProcessInfo processInfo] arguments];
+    for ( NSString* para in parameters )
+    {
+        if ( [para isEqualTo:@"--servername"] )
+        {
+            isServerName = YES;
+        }
+        else if ( isServerName ) 
+        {
+            isServerName = NO;
+            conn = [ self makeServer:para ];
+            break;
+        }
+    }
+    if ( conn )
+    {
+        [conn setProtocolForProxy:@protocol(MacVimServer) ];
+        
+        id <MacVimServer> proxy = (id <MacVimServer>)conn;
+        [proxy openRemoteFiles:parameters ];
+        [conn release];
+        
+        exit(0);
+    }
+    
     // Remember the default menu so that it can be restored if the user closes
     // all editor windows.
     defaultMainMenu = [[NSApp mainMenu] retain];
@@ -474,6 +540,18 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
     NSMutableDictionary *arguments = [self extractArgumentsFromOdocEvent:
             [[NSAppleEventManager sharedAppleEventManager] currentAppleEvent]];
 
+    //chliu added 2013/09/10, for parse args: +<line_num>
+    //
+    //FIXME: Only check +<line_num> argument when first open file !
+    NSArray* parameters = [ [NSProcessInfo processInfo] arguments];
+    for ( NSString* para in parameters )
+    {
+        if ( [para characterAtIndex:0] == '+' )
+        {
+            [arguments setObject:[para substringFromIndex:1] forKey:@"cursorLine"];
+        }
+    }
+    
     if ([self openFiles:filenames withArguments:arguments]) {
         [NSApp replyToOpenOrPrint:NSApplicationDelegateReplySuccess];
     } else {
@@ -1329,6 +1407,31 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
     return array;
 }
 
+//chliu added 2013-09-13, 
+// for support "--servername" parameters.
+-(void) openRemoteFiles:(in bycopy NSArray*)args
+{
+    //FIXME: send command to VIM, the last arg is the file path
+    // and the +<line_num> arg must precede the file path.
+    // e +<line_num> file_path
+    int count = [args count];
+    if ( count > 4 )
+    {
+        NSString* cmd = [NSString stringWithFormat:@"<C-\\><C-N> :e %@ %@<CR>", 
+                         [args objectAtIndex:count-2], 
+                         [args objectAtIndex:count-1] ];
+                         
+        if ( [vimControllers count ] > 0 )
+        {
+            MMVimController* ctrl = [ vimControllers objectAtIndex:0] ;
+            [ ctrl addVimInput:cmd ];
+        }
+                         
+        // NSLog ( @"openRemoteFiles: %@", cmd );
+    }
+}
+
+
 @end // MMAppController
 
 
@@ -1669,10 +1772,10 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
     //
     // The format is: mvim://open?<arguments> where arguments can be:
     //
-    // * url â€” the actual file to open (i.e. a file://â€¦ URL), if you leave
+    // * url â€?the actual file to open (i.e. a file://â€?URL), if you leave
     //         out this argument, the frontmost document is implied.
-    // * line â€” line number to go to (one based).
-    // * column â€” column number to go to (one based).
+    // * line â€?line number to go to (one based).
+    // * column â€?column number to go to (one based).
     //
     // Example: mvim://open?url=file:///etc/profile&line=20
 
@@ -1818,25 +1921,6 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
         if (s && [s length] > 0)
             [dict setObject:s forKey:@"searchText"];
     }
-
-    // 4. chliu added, 2013/09/10
-    // to parse command line arguments, like follow:
-    NSArray* args = [ [NSProcessInfo processInfo] arguments];
-    for ( NSString* arg in args )
-    {
-        if ( [arg isEqualTo:@"--servename"] )
-        {
-            //TODO: make mac vim only run an instance !
-        }
-        else if ( [arg isEqualTo:@"--remote-silent" ] ) 
-        {
-            
-        }
-        else if ( [arg characterAtIndex:0] == '+' )
-        {
-            [dict setObject:[arg substringFromIndex:1] forKey:@"cursorLine"];
-        }
-    } 
 
     return dict;
 }
