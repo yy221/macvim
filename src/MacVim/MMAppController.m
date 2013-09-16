@@ -324,8 +324,8 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
         }
     }
     
-    NSLog ( @"make server: %@, %d, %p", name,
-             [ [NSProcessInfo processInfo] processIdentifier], obj );
+    //NSLog ( @"make server: %@, %d, %p", name,
+    //         [ [NSProcessInfo processInfo] processIdentifier], obj );
     
     return [obj retain];
 }
@@ -461,6 +461,36 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
     [self addInputSourceChangedObserver];
 
     ASLogInfo(@"MacVim finished launching");
+    
+#if 1
+    //chliu added 2013/09/17, for parse args: +<line_num>
+    //
+    //FIXME: Only check +<line_num> argument when first open file !
+    NSArray* parameters = [ [NSProcessInfo processInfo] arguments];
+    if ( [parameters count] > 4 )
+    {
+        NSMutableDictionary* arguments = [NSMutableDictionary dictionary];
+        for ( NSString* para in parameters )
+        {
+            if ( [para characterAtIndex:0] == '+' )
+            {
+                [arguments setObject:[para substringFromIndex:1] forKey:@"cursorLine"];
+            }
+        }
+    
+        if ([self openFiles:[NSArray arrayWithObject:[parameters lastObject ]]
+           withArguments:arguments])
+        {
+            [NSApp replyToOpenOrPrint:NSApplicationDelegateReplySuccess];
+        }
+        else
+        {
+            // TODO: Notify user of failure?
+            [NSApp replyToOpenOrPrint:NSApplicationDelegateReplyFailure];
+        }
+    }
+#endif
+
 }
 
 - (BOOL)applicationShouldOpenUntitledFile:(NSApplication *)sender
@@ -521,6 +551,21 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
 - (void)application:(NSApplication *)sender openFiles:(NSArray *)filenames
 {
     ASLogInfo(@"Opening files %@", filenames);
+    
+    // chliu added 2013/09/17, for parse args: +<line_num>
+    // NOTE: On mac os x 10.8, the NSApplication frame work will treat
+    // each command line parameter as a file name,
+    // so application:openFiles will be called
+    // many times as the count of command line paramters.
+    // So I don't open file here, open it in the applicationDidFinishLaunching method.
+    // And the +<line_num> argument is only valid when first open file !
+    NSArray* parameters = [ [NSProcessInfo processInfo] arguments];
+    if ( [parameters count] > 4 )
+    {
+        [NSApp replyToOpenOrPrint:NSApplicationDelegateReplySuccess];
+    
+        return;
+    }
 
     // Extract ODB/Xcode/Spotlight parameters from the current Apple event,
     // sort the filenames, and then let openFiles:withArguments: do the heavy
@@ -540,18 +585,6 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
     NSMutableDictionary *arguments = [self extractArgumentsFromOdocEvent:
             [[NSAppleEventManager sharedAppleEventManager] currentAppleEvent]];
 
-    //chliu added 2013/09/10, for parse args: +<line_num>
-    //
-    //FIXME: Only check +<line_num> argument when first open file !
-    NSArray* parameters = [ [NSProcessInfo processInfo] arguments];
-    for ( NSString* para in parameters )
-    {
-        if ( [para characterAtIndex:0] == '+' )
-        {
-            [arguments setObject:[para substringFromIndex:1] forKey:@"cursorLine"];
-        }
-    }
-    
     if ([self openFiles:filenames withArguments:arguments]) {
         [NSApp replyToOpenOrPrint:NSApplicationDelegateReplySuccess];
     } else {
@@ -1427,7 +1460,7 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
             [ ctrl addVimInput:cmd ];
         }
                          
-        // NSLog ( @"openRemoteFiles: %@", cmd );
+        NSLog ( @"openRemoteFiles: %@", cmd );
     }
 }
 
