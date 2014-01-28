@@ -50,7 +50,7 @@
 #import <Carbon/Carbon.h>
 #endif
 
-#define NSLog2
+#define NSLog2  // NSLog
 
 #define MM_HANDLE_XCODE_MOD_EVENT 0
 
@@ -249,6 +249,8 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
         [NSApp disableRelaunchOnLogin];
 #endif
 
+    m_bDidFinishLaunch = NO;
+    
     vimControllers = [NSMutableArray new];
     cachedVimControllers = [NSMutableArray new];
     preloadPid = -1;
@@ -328,7 +330,7 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
         }
     }
     
-    NSLog2 ( @"macvim: make server end: %@, %d, %p", name,
+    NSLog2 ( @"macvim: make server end %@, %d, %p", name,
              [ [NSProcessInfo processInfo] processIdentifier], obj );
     
     return [obj retain];
@@ -478,6 +480,8 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
     //FIXME: Only check +<line_num> argument when first open file !
     NSArray* parameters = [ [NSProcessInfo processInfo] arguments];
     
+    m_bDidFinishLaunch = YES;
+    
     NSLog2 (@"macvim: applicationDidFinishLaunching:(NSNotification *)%@", parameters );
     
     if ( [parameters count] > 1 )
@@ -565,24 +569,29 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
 {
     ASLogInfo(@"Opening files %@", filenames);
     
-    // chliu added 2013/09/17, for parse args: +<line_num>
-    // NOTE: On mac os x 10.8, the NSApplication frame work will treat
-    // each command line parameter as a file name,
-    // so application:openFiles will be called
-    // many times as the count of command line paramters.
-    // So I don't open file here, open it in the applicationDidFinishLaunching method.
-    // And the +<line_num> argument is only valid when first open file !
-    NSArray* parameters = [ [NSProcessInfo processInfo] arguments];
+    NSLog2 (@"macvim: application:(NSApplication *)sender openFiles:%@",
+            filenames );
     
-    NSLog2 (@"macvim: application:(NSApplication *)sender openFiles:%@", parameters );
-    
-    if ( [parameters count] > 1 )
-    //chliu modified 2014-01-28, for make default servername
+    // chliu added for make default servername=macosx
+    if ( !m_bDidFinishLaunch )
     {
-        [NSApp replyToOpenOrPrint:NSApplicationDelegateReplySuccess];
+        // FIXME:chliu added 2013/09/17, for parse args: +<line_num>
+        // NOTE: On mac os x 10.8, the NSApplication frame work will treat
+        // each command line parameter as a file name,
+        // so application:openFiles will be called
+        // many times as the count of command line paramters.
+        // So I don't open file here, open it in the applicationDidFinishLaunching method.
+        // And the +<line_num> argument is only valid when first open file !
+        NSArray* parameters = [ [NSProcessInfo processInfo] arguments];
     
-        return;
+        if ( [parameters count] > 1 )
+        {
+            [NSApp replyToOpenOrPrint:NSApplicationDelegateReplySuccess];
+        
+            return;
+        }
     }
+    
 
     // Extract ODB/Xcode/Spotlight parameters from the current Apple event,
     // sort the filenames, and then let openFiles:withArguments: do the heavy
@@ -1481,7 +1490,7 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
     
     }
     
-    NSLog ( @"macvim openRemoteFiles: %@, %@, %lu",
+    NSLog2 ( @"macvim openRemoteFiles: %@, %@, %lu",
            args, cmd, (unsigned long)[vimControllers count ] );
     
     if ( cmd != nil && [vimControllers count ] > 0 )

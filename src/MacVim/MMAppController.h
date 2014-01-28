@@ -25,6 +25,7 @@
 
 
 @interface MMAppController : NSObject <MMAppProtocol, MacVimServer> {
+    BOOL                m_bDidFinishLaunch;
     NSConnection        *m_serverConn; //chliu added 2013-09-13
     NSConnection        *connection;
     NSMutableArray      *vimControllers;
