@@ -50,6 +50,7 @@
 #import <Carbon/Carbon.h>
 #endif
 
+#define NSLog2
 
 #define MM_HANDLE_XCODE_MOD_EVENT 0
 
@@ -301,6 +302,8 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
 //chliu added 2013-09-13, for support --servername parameter.
 -(NSDistantObject*) makeServer:(NSString*)name
 {
+    NSLog2 (@"macvim: make server begin %@", name );
+    
     // Lookup the server connection
     NSDistantObject* obj = [NSConnection rootProxyForConnectionWithRegisteredName:name host:nil];
     
@@ -313,7 +316,8 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
         // Set the name of the root object
         if ( ![conn registerName:name] ) 
         {
-            NSLog (@"Could not register server.  Is one already running?");
+            NSLog (@"macvim: Could not register server.  Is one already running?");
+        
             [conn release];
         }
         else
@@ -324,8 +328,8 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
         }
     }
     
-    //NSLog ( @"make server: %@, %d, %p", name,
-    //         [ [NSProcessInfo processInfo] processIdentifier], obj );
+    NSLog2 ( @"macvim: make server end: %@, %d, %p", name,
+             [ [NSProcessInfo processInfo] processIdentifier], obj );
     
     return [obj retain];
 }
@@ -337,6 +341,8 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
     BOOL isServerName = NO;
     NSDistantObject* conn = nil;
     NSArray* parameters = [ [NSProcessInfo processInfo] arguments];
+    NSString* serverName = @"macosx";
+
     for ( NSString* para in parameters )
     {
         if ( [para isEqualTo:@"--servername"] )
@@ -345,11 +351,15 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
         }
         else if ( isServerName ) 
         {
-            isServerName = NO;
-            conn = [ self makeServer:para ];
+            serverName = para;
             break;
         }
     }
+
+    NSLog2 (@"macvim: applicationWillFinishLaunching %@", parameters );
+    
+    //chliu added 2014-01-28, force use a default servername=macosx
+    conn = [ self makeServer:serverName ];
     if ( conn )
     {
         [conn setProtocolForProxy:@protocol(MacVimServer) ];
@@ -467,7 +477,10 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
     //
     //FIXME: Only check +<line_num> argument when first open file !
     NSArray* parameters = [ [NSProcessInfo processInfo] arguments];
-    if ( [parameters count] > 4 )
+    
+    NSLog2 (@"macvim: applicationDidFinishLaunching:(NSNotification *)%@", parameters );
+    
+    if ( [parameters count] > 1 )
     {
         NSMutableDictionary* arguments = [NSMutableDictionary dictionary];
         for ( NSString* para in parameters )
@@ -560,7 +573,11 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
     // So I don't open file here, open it in the applicationDidFinishLaunching method.
     // And the +<line_num> argument is only valid when first open file !
     NSArray* parameters = [ [NSProcessInfo processInfo] arguments];
-    if ( [parameters count] > 4 )
+    
+    NSLog2 (@"macvim: application:(NSApplication *)sender openFiles:%@", parameters );
+    
+    if ( [parameters count] > 1 )
+    //chliu modified 2014-01-28, for make default servername
     {
         [NSApp replyToOpenOrPrint:NSApplicationDelegateReplySuccess];
     
@@ -1448,19 +1465,29 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
     // and the +<line_num> arg must precede the file path.
     // e +<line_num> file_path
     int count = [args count];
+    NSString* cmd = nil;
+    
     if ( count > 4 )
     {
-        NSString* cmd = [NSString stringWithFormat:@"<C-\\><C-N> :e %@ %@<CR>", 
+        cmd = [NSString stringWithFormat:@"<C-\\><C-N> :e %@ %@<CR>",
                          [args objectAtIndex:count-2], 
                          [args objectAtIndex:count-1] ];
                          
-        if ( [vimControllers count ] > 0 )
-        {
-            MMVimController* ctrl = [ vimControllers objectAtIndex:0] ;
-            [ ctrl addVimInput:cmd ];
-        }
-                         
-        NSLog ( @"openRemoteFiles: %@", cmd );
+    }
+    else if ( count > 1 )
+    {
+        cmd = [NSString stringWithFormat:@"<C-\\><C-N> :e %@<CR>",
+           [args objectAtIndex:count-1] ];
+    
+    }
+    
+    NSLog ( @"macvim openRemoteFiles: %@, %@, %lu",
+           args, cmd, (unsigned long)[vimControllers count ] );
+    
+    if ( cmd != nil && [vimControllers count ] > 0 )
+    {
+        MMVimController* ctrl = [ vimControllers objectAtIndex:0] ;
+        [ ctrl addVimInput:cmd ];
     }
 }
 
